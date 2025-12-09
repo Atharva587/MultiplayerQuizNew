@@ -153,6 +153,18 @@ The game supports multiple ways to add questions:
 3. **Manual Entry**: Create questions one by one
 4. **Default Questions**: Use the built-in 3 anatomy questions
 
+### Folder Organization
+Questions can be organized into folders (e.g., "Upper Limb", "Lower Limb", "Thorax"):
+- Create folders from the Question Library view
+- Move questions between folders individually or in bulk
+- Filter questions by folder when selecting for a quiz
+- Questions without a folder appear as "unfiled"
+
+### Quiz Limits
+- Maximum 500 questions per quiz (increased from original limit)
+- Larger question text area for longer questions
+- Improved scrollable list for large question sets
+
 ### Question Format for Import
 Questions should be formatted like this:
 ```
@@ -183,9 +195,16 @@ D) Pronator teres
 
 **REST Endpoints (`server/routes.ts`)**
 - `POST /api/parse-questions`: Parses PDF or text into questions
-- `GET /api/saved-questions`: Retrieves all saved questions
-- `POST /api/saved-questions`: Saves questions to database
+- `GET /api/saved-questions`: Retrieves all saved questions (with optional folderId filter)
+- `POST /api/saved-questions`: Saves questions to database (with optional folderId)
 - `DELETE /api/saved-questions/:id`: Deletes a saved question
+- `POST /api/saved-questions/:id/move`: Move a question to a different folder
+- `POST /api/saved-questions/bulk-move`: Move multiple questions to a folder
+- `GET /api/folders`: Get all folders
+- `POST /api/folders`: Create a new folder
+- `PUT /api/folders/:id`: Update a folder
+- `DELETE /api/folders/:id`: Delete a folder
+- `GET /api/folders/:id/questions`: Get questions in a specific folder
 - `POST /api/generate-questions`: AI-powered generation (requires OPENAI_API_KEY)
 
 **WebSocket Messages**

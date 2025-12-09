@@ -6,9 +6,11 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Checkbox } from "@/components/ui/checkbox";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { useGame } from "@/lib/gameContext";
 import { useToast } from "@/hooks/use-toast";
-import type { Question } from "@shared/schema";
+import type { Question, QuestionWithFolder, Folder } from "@shared/schema";
 import { 
   Upload, 
   FileText, 
@@ -20,7 +22,10 @@ import {
   Edit2,
   BookOpen,
   Library,
-  Save
+  Save,
+  FolderPlus,
+  FolderOpen,
+  Move
 } from "lucide-react";
 
 type Mode = "select" | "upload" | "manual" | "review" | "library";
@@ -28,12 +33,20 @@ type Mode = "select" | "upload" | "manual" | "review" | "library";
 export default function QuestionBuilder() {
   const [mode, setMode] = useState<Mode>("select");
   const [sourceText, setSourceText] = useState("");
-  const [questionCount, setQuestionCount] = useState(5);
+  const [questionCount, setQuestionCount] = useState(100);
   const [isLoading, setIsLoading] = useState(false);
   const [questions, setQuestions] = useState<Question[]>([]);
   const [editingIndex, setEditingIndex] = useState<number | null>(null);
-  const [savedQuestionsList, setSavedQuestionsList] = useState<Question[]>([]);
+  const [savedQuestionsList, setSavedQuestionsList] = useState<QuestionWithFolder[]>([]);
   const [selectedQuestionIds, setSelectedQuestionIds] = useState<Set<number>>(new Set());
+  const [folders, setFolders] = useState<Folder[]>([]);
+  const [selectedFolderId, setSelectedFolderId] = useState<number | null>(null);
+  const [newFolderName, setNewFolderName] = useState("");
+  const [newFolderDesc, setNewFolderDesc] = useState("");
+  const [showFolderDialog, setShowFolderDialog] = useState(false);
+  const [savingToFolderId, setSavingToFolderId] = useState<number | null>(null);
+  const [showMoveDialog, setShowMoveDialog] = useState(false);
+  const [moveToFolderId, setMoveToFolderId] = useState<number | null>(null);
   
   const { room, isHost, setCustomQuestions } = useGame();
   const { toast } = useToast();
@@ -49,9 +62,25 @@ export default function QuestionBuilder() {
     }
   }, [room, isHost, navigate]);
 
-  const loadSavedQuestions = async () => {
+  const loadFolders = async () => {
     try {
-      const response = await fetch("/api/saved-questions");
+      const response = await fetch("/api/folders");
+      const data = await response.json();
+      if (response.ok) {
+        setFolders(data.folders);
+      }
+    } catch (error) {
+      console.error("Failed to load folders:", error);
+    }
+  };
+
+  const loadSavedQuestions = async (folderId?: number | null) => {
+    try {
+      let url = "/api/saved-questions";
+      if (folderId) {
+        url += `?folderId=${folderId}`;
+      }
+      const response = await fetch(url);
       const data = await response.json();
       if (response.ok) {
         setSavedQuestionsList(data.questions);
@@ -62,8 +91,90 @@ export default function QuestionBuilder() {
   };
 
   useEffect(() => {
+    loadFolders();
     loadSavedQuestions();
   }, []);
+
+  useEffect(() => {
+    loadSavedQuestions(selectedFolderId);
+  }, [selectedFolderId]);
+
+  const handleCreateFolder = async () => {
+    if (!newFolderName.trim()) {
+      toast({ title: "Please enter a folder name", variant: "destructive" });
+      return;
+    }
+    
+    setIsLoading(true);
+    try {
+      const response = await fetch("/api/folders", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ name: newFolderName, description: newFolderDesc }),
+      });
+      
+      if (response.ok) {
+        toast({ title: "Folder created!" });
+        setNewFolderName("");
+        setNewFolderDesc("");
+        setShowFolderDialog(false);
+        await loadFolders();
+      }
+    } catch (error) {
+      toast({ title: "Failed to create folder", variant: "destructive" });
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  const handleDeleteFolder = async (folderId: number) => {
+    setIsLoading(true);
+    try {
+      const response = await fetch(`/api/folders/${folderId}`, { method: "DELETE" });
+      if (response.ok) {
+        toast({ title: "Folder deleted" });
+        if (selectedFolderId === folderId) {
+          setSelectedFolderId(null);
+        }
+        await loadFolders();
+        await loadSavedQuestions(selectedFolderId === folderId ? null : selectedFolderId);
+      }
+    } catch (error) {
+      toast({ title: "Failed to delete folder", variant: "destructive" });
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  const handleMoveQuestions = async () => {
+    if (selectedQuestionIds.size === 0) {
+      toast({ title: "Please select questions to move", variant: "destructive" });
+      return;
+    }
+
+    setIsLoading(true);
+    try {
+      const response = await fetch("/api/saved-questions/bulk-move", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ 
+          questionIds: Array.from(selectedQuestionIds), 
+          folderId: moveToFolderId 
+        }),
+      });
+      
+      if (response.ok) {
+        toast({ title: `Moved ${selectedQuestionIds.size} questions!` });
+        setSelectedQuestionIds(new Set());
+        setShowMoveDialog(false);
+        await loadSavedQuestions(selectedFolderId);
+      }
+    } catch (error) {
+      toast({ title: "Failed to move questions", variant: "destructive" });
+    } finally {
+      setIsLoading(false);
+    }
+  };
 
   const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -163,7 +274,7 @@ export default function QuestionBuilder() {
       const response = await fetch("/api/saved-questions", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ questions: validQuestions }),
+        body: JSON.stringify({ questions: validQuestions, folderId: savingToFolderId }),
       });
       
       const data = await response.json();
@@ -216,7 +327,7 @@ export default function QuestionBuilder() {
       });
       if (response.ok) {
         toast({ title: "Question deleted" });
-        await loadSavedQuestions();
+        await loadSavedQuestions(selectedFolderId);
         setSelectedQuestionIds(prev => {
           const newSet = new Set(prev);
           newSet.delete(id);
@@ -290,7 +401,7 @@ export default function QuestionBuilder() {
 
   return (
     <div className="min-h-screen bg-background p-6">
-      <div className="max-w-4xl mx-auto space-y-6">
+      <div className="max-w-5xl mx-auto space-y-6">
         <div className="flex items-center gap-4">
           <Button
             variant="ghost"
@@ -379,33 +490,167 @@ export default function QuestionBuilder() {
 
         {mode === "library" && (
           <Card className="p-6 space-y-6">
-            <div className="flex items-center justify-between">
+            <div className="flex items-center justify-between flex-wrap gap-4">
               <div>
                 <h2 className="text-lg font-semibold">Question Library</h2>
                 <p className="text-sm text-muted-foreground">
-                  {savedQuestionsList.length} questions saved
+                  {savedQuestionsList.length} questions {selectedFolderId ? "in folder" : "total"}
                 </p>
               </div>
-              <div className="flex items-center gap-4">
+              <div className="flex items-center gap-4 flex-wrap">
                 <div className="flex items-center gap-2">
                   <Label>Use up to:</Label>
                   <Input
                     type="number"
                     min={1}
-                    max={savedQuestionsList.length || 50}
+                    max={500}
                     value={questionCount}
-                    onChange={(e) => setQuestionCount(parseInt(e.target.value) || 5)}
-                    className="w-20"
+                    onChange={(e) => setQuestionCount(parseInt(e.target.value) || 100)}
+                    className="w-24"
                   />
                   <span className="text-sm text-muted-foreground">questions</span>
                 </div>
               </div>
             </div>
 
+            <div className="flex gap-4 flex-wrap">
+              <div className="flex items-center gap-2 flex-1 min-w-[200px]">
+                <FolderOpen className="w-5 h-5 text-muted-foreground" />
+                <Select 
+                  value={selectedFolderId?.toString() || "all"}
+                  onValueChange={(v) => setSelectedFolderId(v === "all" ? null : parseInt(v))}
+                >
+                  <SelectTrigger className="w-full">
+                    <SelectValue placeholder="All Questions" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="all">All Questions</SelectItem>
+                    {folders.map((folder) => (
+                      <SelectItem key={folder.id} value={folder.id.toString()}>
+                        {folder.name}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+              
+              <Dialog open={showFolderDialog} onOpenChange={setShowFolderDialog}>
+                <DialogTrigger asChild>
+                  <Button variant="outline" size="sm" className="gap-2">
+                    <FolderPlus className="w-4 h-4" />
+                    New Folder
+                  </Button>
+                </DialogTrigger>
+                <DialogContent>
+                  <DialogHeader>
+                    <DialogTitle>Create New Folder</DialogTitle>
+                  </DialogHeader>
+                  <div className="space-y-4 pt-4">
+                    <div className="space-y-2">
+                      <Label>Folder Name</Label>
+                      <Input
+                        value={newFolderName}
+                        onChange={(e) => setNewFolderName(e.target.value)}
+                        placeholder="e.g., Upper Limb, Lower Limb"
+                      />
+                    </div>
+                    <div className="space-y-2">
+                      <Label>Description (optional)</Label>
+                      <Textarea
+                        value={newFolderDesc}
+                        onChange={(e) => setNewFolderDesc(e.target.value)}
+                        placeholder="Brief description of this folder"
+                      />
+                    </div>
+                    <Button 
+                      onClick={handleCreateFolder} 
+                      disabled={isLoading || !newFolderName.trim()}
+                      className="w-full"
+                    >
+                      {isLoading ? <Loader2 className="w-4 h-4 animate-spin" /> : "Create Folder"}
+                    </Button>
+                  </div>
+                </DialogContent>
+              </Dialog>
+
+              {selectedQuestionIds.size > 0 && (
+                <Dialog open={showMoveDialog} onOpenChange={setShowMoveDialog}>
+                  <DialogTrigger asChild>
+                    <Button variant="outline" size="sm" className="gap-2">
+                      <Move className="w-4 h-4" />
+                      Move Selected ({selectedQuestionIds.size})
+                    </Button>
+                  </DialogTrigger>
+                  <DialogContent>
+                    <DialogHeader>
+                      <DialogTitle>Move Questions to Folder</DialogTitle>
+                    </DialogHeader>
+                    <div className="space-y-4 pt-4">
+                      <Select 
+                        value={moveToFolderId?.toString() || "none"}
+                        onValueChange={(v) => setMoveToFolderId(v === "none" ? null : parseInt(v))}
+                      >
+                        <SelectTrigger>
+                          <SelectValue placeholder="Select folder" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="none">No Folder (Unfiled)</SelectItem>
+                          {folders.map((folder) => (
+                            <SelectItem key={folder.id} value={folder.id.toString()}>
+                              {folder.name}
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                      <Button 
+                        onClick={handleMoveQuestions} 
+                        disabled={isLoading}
+                        className="w-full"
+                      >
+                        {isLoading ? <Loader2 className="w-4 h-4 animate-spin" /> : `Move ${selectedQuestionIds.size} Questions`}
+                      </Button>
+                    </div>
+                  </DialogContent>
+                </Dialog>
+              )}
+            </div>
+
+            {folders.length > 0 && (
+              <div className="flex flex-wrap gap-2">
+                {folders.map((folder) => (
+                  <div 
+                    key={folder.id}
+                    className={`flex items-center gap-2 px-3 py-1.5 rounded-lg border cursor-pointer transition-colors ${
+                      selectedFolderId === folder.id 
+                        ? "border-primary bg-primary/5" 
+                        : "border-border hover:border-primary/50"
+                    }`}
+                    onClick={() => setSelectedFolderId(selectedFolderId === folder.id ? null : folder.id)}
+                  >
+                    <FolderOpen className="w-4 h-4" />
+                    <span className="text-sm font-medium">{folder.name}</span>
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      className="w-5 h-5 ml-1"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        handleDeleteFolder(folder.id);
+                      }}
+                    >
+                      <Trash2 className="w-3 h-3 text-destructive" />
+                    </Button>
+                  </div>
+                ))}
+              </div>
+            )}
+
             {savedQuestionsList.length === 0 ? (
               <div className="text-center py-8">
                 <FileText className="w-12 h-12 mx-auto text-muted-foreground mb-4" />
-                <p className="text-muted-foreground">No saved questions yet</p>
+                <p className="text-muted-foreground">
+                  {selectedFolderId ? "No questions in this folder" : "No saved questions yet"}
+                </p>
                 <Button onClick={() => setMode("upload")} variant="outline" className="mt-4">
                   Import Questions
                 </Button>
@@ -414,7 +659,7 @@ export default function QuestionBuilder() {
               <>
                 <div className="flex items-center gap-2">
                   <Checkbox
-                    checked={selectedQuestionIds.size === savedQuestionsList.length}
+                    checked={selectedQuestionIds.size === savedQuestionsList.length && savedQuestionsList.length > 0}
                     onCheckedChange={selectAllQuestions}
                   />
                   <Label className="cursor-pointer" onClick={selectAllQuestions}>
@@ -422,7 +667,7 @@ export default function QuestionBuilder() {
                   </Label>
                 </div>
 
-                <div className="space-y-3 max-h-96 overflow-y-auto">
+                <div className="space-y-3 max-h-[500px] overflow-y-auto">
                   {savedQuestionsList.map((question) => (
                     <div 
                       key={question.id}
@@ -443,12 +688,12 @@ export default function QuestionBuilder() {
                               {question.category}
                             </span>
                           </div>
-                          <p className="font-medium">{question.question}</p>
+                          <p className="font-medium text-sm leading-relaxed">{question.question}</p>
                           <div className="mt-2 grid grid-cols-2 gap-1 text-sm">
                             {question.options.map((opt, i) => (
                               <span 
                                 key={i} 
-                                className={i === question.correctIndex ? "text-green-600 font-medium" : "text-muted-foreground"}
+                                className={`${i === question.correctIndex ? "text-green-600 font-medium" : "text-muted-foreground"} truncate`}
                               >
                                 {String.fromCharCode(65 + i)}. {opt}
                               </span>
@@ -534,7 +779,7 @@ D) Humerus
 (Mark the correct answer with an asterisk *)`}
                   value={sourceText}
                   onChange={(e) => setSourceText(e.target.value)}
-                  className="min-h-[200px] font-mono text-sm"
+                  className="min-h-[300px] font-mono text-sm"
                   disabled={isLoading}
                 />
                 <p className="text-xs text-muted-foreground">
@@ -565,11 +810,27 @@ D) Humerus
 
         {(mode === "manual" || mode === "review") && (
           <div className="space-y-4">
-            <div className="flex items-center justify-between">
+            <div className="flex items-center justify-between flex-wrap gap-4">
               <h2 className="text-lg font-semibold">
                 {questions.length} Question{questions.length !== 1 ? "s" : ""}
               </h2>
-              <div className="flex gap-2">
+              <div className="flex gap-2 flex-wrap">
+                <Select 
+                  value={savingToFolderId?.toString() || "none"}
+                  onValueChange={(v) => setSavingToFolderId(v === "none" ? null : parseInt(v))}
+                >
+                  <SelectTrigger className="w-[180px]">
+                    <SelectValue placeholder="Save to folder..." />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="none">No Folder</SelectItem>
+                    {folders.map((folder) => (
+                      <SelectItem key={folder.id} value={folder.id.toString()}>
+                        {folder.name}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
                 <Button onClick={addManualQuestion} variant="outline" size="sm" className="gap-2">
                   <Plus className="w-4 h-4" />
                   Add Question
@@ -600,6 +861,7 @@ D) Humerus
                             value={question.question}
                             onChange={(e) => updateQuestion(index, { question: e.target.value })}
                             placeholder="Enter your question..."
+                            className="min-h-[100px]"
                           />
                         </div>
 
@@ -651,7 +913,7 @@ D) Humerus
                       </div>
                     ) : (
                       <div className="space-y-2">
-                        <p className="font-medium">{question.question || "No question text"}</p>
+                        <p className="font-medium leading-relaxed">{question.question || "No question text"}</p>
                         <div className="grid grid-cols-2 gap-2">
                           {question.options.map((opt, optIndex) => (
                             <div 
@@ -706,7 +968,7 @@ D) Humerus
               </Card>
             )}
 
-            <div className="flex gap-4 pt-4">
+            <div className="flex gap-4 pt-4 flex-wrap">
               <Button variant="outline" onClick={() => setMode("select")} className="flex-1">
                 Back
               </Button>

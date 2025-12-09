@@ -542,6 +542,7 @@ export async function registerRoutes(
   app.post("/api/saved-questions", async (req, res) => {
     try {
       const questionsToSave = req.body.questions;
+      const folderId = req.body.folderId || null;
       
       if (!Array.isArray(questionsToSave) || questionsToSave.length === 0) {
         return res.status(400).json({ message: "Please provide questions to save" });
@@ -553,6 +554,7 @@ export async function registerRoutes(
           options: q.options,
           correctIndex: q.correctIndex,
           category: q.category || "General",
+          folderId: folderId,
         }))
       ).returning();
 
@@ -565,14 +567,30 @@ export async function registerRoutes(
 
   app.get("/api/saved-questions", async (req, res) => {
     try {
-      const questions = await db.select().from(savedQuestions).orderBy(desc(savedQuestions.createdAt));
+      const folderId = req.query.folderId ? parseInt(req.query.folderId as string) : null;
+      const includeUnfiled = req.query.unfiled === 'true';
       
-      const formattedQuestions: Question[] = questions.map(q => ({
+      let questions;
+      if (folderId) {
+        questions = await db.select().from(savedQuestions)
+          .where(eq(savedQuestions.folderId, folderId))
+          .orderBy(desc(savedQuestions.createdAt));
+      } else if (includeUnfiled) {
+        const { isNull } = await import("drizzle-orm");
+        questions = await db.select().from(savedQuestions)
+          .where(isNull(savedQuestions.folderId))
+          .orderBy(desc(savedQuestions.createdAt));
+      } else {
+        questions = await db.select().from(savedQuestions).orderBy(desc(savedQuestions.createdAt));
+      }
+      
+      const formattedQuestions = questions.map(q => ({
         id: q.id,
         question: q.question,
         options: q.options as string[],
         correctIndex: q.correctIndex,
         category: q.category,
+        folderId: q.folderId,
       }));
       
       res.json({ questions: formattedQuestions, total: formattedQuestions.length });
@@ -590,6 +608,118 @@ export async function registerRoutes(
     } catch (error) {
       console.error("Error deleting question:", error);
       res.status(500).json({ message: "Failed to delete question: " + (error as Error).message });
+    }
+  });
+
+  app.get("/api/folders", async (req, res) => {
+    try {
+      const folders = await db.select().from(questionFolders).orderBy(desc(questionFolders.createdAt));
+      res.json({ folders });
+    } catch (error) {
+      console.error("Error fetching folders:", error);
+      res.status(500).json({ message: "Failed to fetch folders: " + (error as Error).message });
+    }
+  });
+
+  app.post("/api/folders", async (req, res) => {
+    try {
+      const { name, description } = req.body;
+      if (!name || name.trim().length === 0) {
+        return res.status(400).json({ message: "Folder name is required" });
+      }
+      const [folder] = await db.insert(questionFolders).values({
+        name: name.trim(),
+        description: description?.trim() || null,
+      }).returning();
+      res.json({ folder });
+    } catch (error) {
+      console.error("Error creating folder:", error);
+      res.status(500).json({ message: "Failed to create folder: " + (error as Error).message });
+    }
+  });
+
+  app.put("/api/folders/:id", async (req, res) => {
+    try {
+      const id = parseInt(req.params.id);
+      const { name, description } = req.body;
+      if (!name || name.trim().length === 0) {
+        return res.status(400).json({ message: "Folder name is required" });
+      }
+      const [folder] = await db.update(questionFolders)
+        .set({ name: name.trim(), description: description?.trim() || null })
+        .where(eq(questionFolders.id, id))
+        .returning();
+      res.json({ folder });
+    } catch (error) {
+      console.error("Error updating folder:", error);
+      res.status(500).json({ message: "Failed to update folder: " + (error as Error).message });
+    }
+  });
+
+  app.delete("/api/folders/:id", async (req, res) => {
+    try {
+      const id = parseInt(req.params.id);
+      await db.update(savedQuestions).set({ folderId: null }).where(eq(savedQuestions.folderId, id));
+      await db.delete(questionFolders).where(eq(questionFolders.id, id));
+      res.json({ deleted: true });
+    } catch (error) {
+      console.error("Error deleting folder:", error);
+      res.status(500).json({ message: "Failed to delete folder: " + (error as Error).message });
+    }
+  });
+
+  app.get("/api/folders/:id/questions", async (req, res) => {
+    try {
+      const folderId = parseInt(req.params.id);
+      const questions = await db.select().from(savedQuestions)
+        .where(eq(savedQuestions.folderId, folderId))
+        .orderBy(desc(savedQuestions.createdAt));
+      
+      const formattedQuestions: Question[] = questions.map(q => ({
+        id: q.id,
+        question: q.question,
+        options: q.options as string[],
+        correctIndex: q.correctIndex,
+        category: q.category,
+      }));
+      
+      res.json({ questions: formattedQuestions, total: formattedQuestions.length });
+    } catch (error) {
+      console.error("Error fetching folder questions:", error);
+      res.status(500).json({ message: "Failed to fetch questions: " + (error as Error).message });
+    }
+  });
+
+  app.post("/api/saved-questions/:id/move", async (req, res) => {
+    try {
+      const id = parseInt(req.params.id);
+      const { folderId } = req.body;
+      const [question] = await db.update(savedQuestions)
+        .set({ folderId: folderId || null })
+        .where(eq(savedQuestions.id, id))
+        .returning();
+      res.json({ question });
+    } catch (error) {
+      console.error("Error moving question:", error);
+      res.status(500).json({ message: "Failed to move question: " + (error as Error).message });
+    }
+  });
+
+  app.post("/api/saved-questions/bulk-move", async (req, res) => {
+    try {
+      const { questionIds, folderId } = req.body;
+      if (!Array.isArray(questionIds) || questionIds.length === 0) {
+        return res.status(400).json({ message: "Please provide question IDs to move" });
+      }
+      for (const id of questionIds) {
+        await db.update(savedQuestions)
+          .set({ folderId: folderId || null })
+          .where(eq(savedQuestions.id, id));
+      }
+      res.json({ moved: questionIds.length });
+    } catch (error) {
+      console.error("Error moving questions:", error);
+      res.status(500).json({ message: "Failed to move questions: " + (error as Error).message });
     }
   });
 

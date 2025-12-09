@@ -11,6 +11,19 @@ export const questionSchema = z.object({
 
 export type Question = z.infer<typeof questionSchema>;
 
+// Extended question with folder support
+export interface QuestionWithFolder extends Question {
+  folderId?: number | null;
+}
+
+// Folder type for UI
+export interface Folder {
+  id: number;
+  name: string;
+  description?: string | null;
+  createdAt?: Date;
+}
+
 // Player schema
 export const playerSchema = z.object({
   id: z.string(),
@@ -40,7 +53,7 @@ export type GameRoom = z.infer<typeof gameRoomSchema>;
 // Question generation request
 export const questionGenerationRequestSchema = z.object({
   sourceText: z.string().min(50, "Source text must be at least 50 characters"),
-  questionCount: z.number().min(1).max(50),
+  questionCount: z.number().min(1).max(500),
 });
 
 export type QuestionGenerationRequest = z.infer<typeof questionGenerationRequestSchema>;
@@ -82,7 +95,7 @@ export type AnswerSubmission = z.infer<typeof answerSubmissionSchema>;
 export const QUESTION_TIME_LIMIT = 30; // seconds
 export const MAX_POINTS_PER_QUESTION = 1000;
 export const MIN_POINTS_PER_QUESTION = 100;
-export const MAX_QUESTIONS_PER_QUIZ = 100; // increased from default
+export const MAX_QUESTIONS_PER_QUIZ = 500; // increased for larger quizzes
 
 // Question types
 export type QuestionType = "multiple_choice" | "true_false" | "fill_in_blank";
