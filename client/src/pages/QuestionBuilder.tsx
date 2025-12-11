@@ -11,12 +11,12 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from 
 import { useGame } from "@/lib/gameContext";
 import { useToast } from "@/hooks/use-toast";
 import type { Question, QuestionWithFolder, Folder } from "@shared/schema";
-import { 
-  Upload, 
-  FileText, 
-  Plus, 
-  Trash2, 
-  ArrowLeft, 
+import {
+  Upload,
+  FileText,
+  Plus,
+  Trash2,
+  ArrowLeft,
   Check,
   Loader2,
   Edit2,
@@ -47,7 +47,7 @@ export default function QuestionBuilder() {
   const [savingToFolderId, setSavingToFolderId] = useState<number | null>(null);
   const [showMoveDialog, setShowMoveDialog] = useState(false);
   const [moveToFolderId, setMoveToFolderId] = useState<number | null>(null);
-  
+
   const { room, isHost, setCustomQuestions } = useGame();
   const { toast } = useToast();
   const [, navigate] = useLocation();
@@ -104,7 +104,7 @@ export default function QuestionBuilder() {
       toast({ title: "Please enter a folder name", variant: "destructive" });
       return;
     }
-    
+
     setIsLoading(true);
     try {
       const response = await fetch("/api/folders", {
@@ -112,7 +112,7 @@ export default function QuestionBuilder() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ name: newFolderName, description: newFolderDesc }),
       });
-      
+
       if (response.ok) {
         toast({ title: "Folder created!" });
         setNewFolderName("");
@@ -157,12 +157,12 @@ export default function QuestionBuilder() {
       const response = await fetch("/api/saved-questions/bulk-move", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ 
-          questionIds: Array.from(selectedQuestionIds), 
-          folderId: moveToFolderId 
+        body: JSON.stringify({
+          questionIds: Array.from(selectedQuestionIds),
+          folderId: moveToFolderId
         }),
       });
-      
+
       if (response.ok) {
         toast({ title: `Moved ${selectedQuestionIds.size} questions!` });
         setSelectedQuestionIds(new Set());
@@ -183,19 +183,19 @@ export default function QuestionBuilder() {
     if (file.type === "application/pdf") {
       const formData = new FormData();
       formData.append("pdf", file);
-      
+
       setIsLoading(true);
       try {
         const response = await fetch("/api/parse-questions", {
           method: "POST",
           body: formData,
         });
-        
+
         const data = await response.json();
         if (!response.ok) {
           throw new Error(data.message || "Failed to parse questions");
         }
-        
+
         const formattedQuestions = data.questions.map((q: any, i: number) => ({
           ...q,
           id: i + 1,
@@ -204,10 +204,10 @@ export default function QuestionBuilder() {
         setMode("review");
         toast({ title: `Parsed ${data.parsedCount} questions!` });
       } catch (error) {
-        toast({ 
-          title: "Failed to parse questions", 
+        toast({
+          title: "Failed to parse questions",
           description: (error as Error).message,
-          variant: "destructive" 
+          variant: "destructive"
         });
       } finally {
         setIsLoading(false);
@@ -234,12 +234,12 @@ export default function QuestionBuilder() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ text: sourceText }),
       });
-      
+
       const data = await response.json();
       if (!response.ok) {
         throw new Error(data.message || "Failed to parse questions");
       }
-      
+
       const formattedQuestions = data.questions.map((q: any, i: number) => ({
         ...q,
         id: i + 1,
@@ -248,10 +248,10 @@ export default function QuestionBuilder() {
       setMode("review");
       toast({ title: `Parsed ${data.parsedCount} questions!` });
     } catch (error) {
-      toast({ 
-        title: "Failed to parse questions", 
+      toast({
+        title: "Failed to parse questions",
         description: (error as Error).message,
-        variant: "destructive" 
+        variant: "destructive"
       });
     } finally {
       setIsLoading(false);
@@ -259,11 +259,11 @@ export default function QuestionBuilder() {
   };
 
   const handleSaveToLibrary = async () => {
-    const validQuestions = questions.filter(q => 
-      q.question.trim() && 
+    const validQuestions = questions.filter(q =>
+      q.question.trim() &&
       q.options.every(opt => opt.trim())
     );
-    
+
     if (validQuestions.length === 0) {
       toast({ title: "No valid questions to save", variant: "destructive" });
       return;
@@ -276,21 +276,21 @@ export default function QuestionBuilder() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ questions: validQuestions, folderId: savingToFolderId }),
       });
-      
+
       const data = await response.json();
       if (!response.ok) {
         throw new Error(data.message || "Failed to save questions");
       }
-      
+
       toast({ title: `Saved ${data.saved} questions to library!` });
       await loadSavedQuestions();
       setQuestions([]);
       setMode("select");
     } catch (error) {
-      toast({ 
-        title: "Failed to save questions", 
+      toast({
+        title: "Failed to save questions",
         description: (error as Error).message,
-        variant: "destructive" 
+        variant: "destructive"
       });
     } finally {
       setIsLoading(false);
@@ -310,7 +310,7 @@ export default function QuestionBuilder() {
   };
 
   const updateQuestion = (index: number, updates: Partial<Question>) => {
-    setQuestions(questions.map((q, i) => 
+    setQuestions(questions.map((q, i) =>
       i === index ? { ...q, ...updates } : q
     ));
   };
@@ -364,7 +364,7 @@ export default function QuestionBuilder() {
       .filter(q => selectedQuestionIds.has(q.id))
       .slice(0, questionCount)
       .map((q, i) => ({ ...q, id: i + 1 }));
-    
+
     if (selectedQuestions.length === 0) {
       toast({ title: "Please select at least one question", variant: "destructive" });
       return;
@@ -376,11 +376,11 @@ export default function QuestionBuilder() {
   };
 
   const handleSaveQuestions = () => {
-    const validQuestions = questions.filter(q => 
-      q.question.trim() && 
+    const validQuestions = questions.filter(q =>
+      q.question.trim() &&
       q.options.every(opt => opt.trim())
     );
-    
+
     if (validQuestions.length === 0) {
       toast({ title: "Please add at least one complete question", variant: "destructive" });
       return;
@@ -418,7 +418,7 @@ export default function QuestionBuilder() {
 
         {mode === "select" && (
           <div className="grid gap-4 md:grid-cols-2">
-            <Card 
+            <Card
               className="p-6 cursor-pointer hover:border-primary transition-colors"
               onClick={() => setMode("library")}
             >
@@ -435,7 +435,7 @@ export default function QuestionBuilder() {
               </div>
             </Card>
 
-            <Card 
+            <Card
               className="p-6 cursor-pointer hover:border-primary transition-colors"
               onClick={() => setMode("upload")}
             >
@@ -452,7 +452,7 @@ export default function QuestionBuilder() {
               </div>
             </Card>
 
-            <Card 
+            <Card
               className="p-6 cursor-pointer hover:border-primary transition-colors"
               onClick={() => { setMode("manual"); addManualQuestion(); }}
             >
@@ -469,7 +469,7 @@ export default function QuestionBuilder() {
               </div>
             </Card>
 
-            <Card 
+            <Card
               className="p-6 cursor-pointer hover:border-primary transition-colors"
               onClick={handleUseDefault}
             >
@@ -516,7 +516,7 @@ export default function QuestionBuilder() {
             <div className="flex gap-4 flex-wrap">
               <div className="flex items-center gap-2 flex-1 min-w-[200px]">
                 <FolderOpen className="w-5 h-5 text-muted-foreground" />
-                <Select 
+                <Select
                   value={selectedFolderId?.toString() || "all"}
                   onValueChange={(v) => setSelectedFolderId(v === "all" ? null : parseInt(v))}
                 >
@@ -533,7 +533,7 @@ export default function QuestionBuilder() {
                   </SelectContent>
                 </Select>
               </div>
-              
+
               <Dialog open={showFolderDialog} onOpenChange={setShowFolderDialog}>
                 <DialogTrigger asChild>
                   <Button variant="outline" size="sm" className="gap-2">
@@ -562,8 +562,8 @@ export default function QuestionBuilder() {
                         placeholder="Brief description of this folder"
                       />
                     </div>
-                    <Button 
-                      onClick={handleCreateFolder} 
+                    <Button
+                      onClick={handleCreateFolder}
                       disabled={isLoading || !newFolderName.trim()}
                       className="w-full"
                     >
@@ -586,7 +586,7 @@ export default function QuestionBuilder() {
                       <DialogTitle>Move Questions to Folder</DialogTitle>
                     </DialogHeader>
                     <div className="space-y-4 pt-4">
-                      <Select 
+                      <Select
                         value={moveToFolderId?.toString() || "none"}
                         onValueChange={(v) => setMoveToFolderId(v === "none" ? null : parseInt(v))}
                       >
@@ -602,8 +602,8 @@ export default function QuestionBuilder() {
                           ))}
                         </SelectContent>
                       </Select>
-                      <Button 
-                        onClick={handleMoveQuestions} 
+                      <Button
+                        onClick={handleMoveQuestions}
                         disabled={isLoading}
                         className="w-full"
                       >
@@ -618,13 +618,12 @@ export default function QuestionBuilder() {
             {folders.length > 0 && (
               <div className="flex flex-wrap gap-2">
                 {folders.map((folder) => (
-                  <div 
+                  <div
                     key={folder.id}
-                    className={`flex items-center gap-2 px-3 py-1.5 rounded-lg border cursor-pointer transition-colors ${
-                      selectedFolderId === folder.id 
-                        ? "border-primary bg-primary/5" 
+                    className={`flex items-center gap-2 px-3 py-1.5 rounded-lg border cursor-pointer transition-colors ${selectedFolderId === folder.id
+                        ? "border-primary bg-primary/5"
                         : "border-border hover:border-primary/50"
-                    }`}
+                      }`}
                     onClick={() => setSelectedFolderId(selectedFolderId === folder.id ? null : folder.id)}
                   >
                     <FolderOpen className="w-4 h-4" />
@@ -669,13 +668,12 @@ export default function QuestionBuilder() {
 
                 <div className="space-y-3 max-h-[500px] overflow-y-auto">
                   {savedQuestionsList.map((question) => (
-                    <div 
+                    <div
                       key={question.id}
-                      className={`p-4 rounded-lg border transition-colors ${
-                        selectedQuestionIds.has(question.id) 
-                          ? "border-primary bg-primary/5" 
+                      className={`p-4 rounded-lg border transition-colors ${selectedQuestionIds.has(question.id)
+                          ? "border-primary bg-primary/5"
                           : "border-border"
-                      }`}
+                        }`}
                     >
                       <div className="flex items-start gap-3">
                         <Checkbox
@@ -691,8 +689,8 @@ export default function QuestionBuilder() {
                           <p className="font-medium text-sm leading-relaxed">{question.question}</p>
                           <div className="mt-2 grid grid-cols-2 gap-1 text-sm">
                             {question.options.map((opt, i) => (
-                              <span 
-                                key={i} 
+                              <span
+                                key={i}
                                 className={`${i === question.correctIndex ? "text-green-600 font-medium" : "text-muted-foreground"} truncate`}
                               >
                                 {String.fromCharCode(65 + i)}. {opt}
@@ -716,9 +714,9 @@ export default function QuestionBuilder() {
                   <Button variant="outline" onClick={() => setMode("select")} className="flex-1">
                     Back
                   </Button>
-                  <Button 
-                    onClick={handleUseSelectedQuestions} 
-                    className="flex-1" 
+                  <Button
+                    onClick={handleUseSelectedQuestions}
+                    className="flex-1"
                     disabled={selectedQuestionIds.size === 0}
                   >
                     Use {Math.min(selectedQuestionIds.size, questionCount)} Questions
@@ -779,7 +777,7 @@ D) Humerus
 (Mark the correct answer with an asterisk *)`}
                   value={sourceText}
                   onChange={(e) => setSourceText(e.target.value)}
-                  className="min-h-[300px] font-mono text-sm"
+                  className="min-h-[500px] font-mono text-sm"
                   disabled={isLoading}
                 />
                 <p className="text-xs text-muted-foreground">
@@ -815,7 +813,7 @@ D) Humerus
                 {questions.length} Question{questions.length !== 1 ? "s" : ""}
               </h2>
               <div className="flex gap-2 flex-wrap">
-                <Select 
+                <Select
                   value={savingToFolderId?.toString() || "none"}
                   onValueChange={(v) => setSavingToFolderId(v === "none" ? null : parseInt(v))}
                 >
@@ -904,8 +902,8 @@ D) Humerus
                           ))}
                         </div>
 
-                        <Button 
-                          onClick={() => setEditingIndex(null)} 
+                        <Button
+                          onClick={() => setEditingIndex(null)}
                           size="sm"
                         >
                           Done Editing
@@ -916,13 +914,12 @@ D) Humerus
                         <p className="font-medium leading-relaxed">{question.question || "No question text"}</p>
                         <div className="grid grid-cols-2 gap-2">
                           {question.options.map((opt, optIndex) => (
-                            <div 
+                            <div
                               key={optIndex}
-                              className={`text-sm p-2 rounded ${
-                                question.correctIndex === optIndex 
-                                  ? "bg-green-500/10 border border-green-500/30" 
+                              className={`text-sm p-2 rounded ${question.correctIndex === optIndex
+                                  ? "bg-green-500/10 border border-green-500/30"
                                   : "bg-muted"
-                              }`}
+                                }`}
                             >
                               <span className="font-medium mr-2">
                                 {String.fromCharCode(65 + optIndex)}.
@@ -972,10 +969,10 @@ D) Humerus
               <Button variant="outline" onClick={() => setMode("select")} className="flex-1">
                 Back
               </Button>
-              <Button 
+              <Button
                 variant="secondary"
-                onClick={handleSaveToLibrary} 
-                className="flex-1 gap-2" 
+                onClick={handleSaveToLibrary}
+                className="flex-1 gap-2"
                 disabled={questions.length === 0 || isLoading}
               >
                 <Save className="w-4 h-4" />
